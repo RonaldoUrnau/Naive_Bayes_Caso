@@ -1,0 +1,24 @@
+# Python y compilados
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# IDEs y Sistema Operativo
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Archivos comprimidos y respaldos
+*.zip
+*.tar.gz
