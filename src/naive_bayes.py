@@ -23,7 +23,12 @@ def log_suma_exp(a, axis=1):
 
     Ejemplo: log_suma_exp(np.array([[-1000.0, -1000.0]])) -> array([-999.3069...])
     """
-    raise NotImplementedError("Completar log_suma_exp")
+    m = np.max(a, axis=axis, keepdims=True)
+    m_safe = np.where(np.isneginf(m), 0.0, m)
+    exp_diff = np.exp(a - m_safe)
+    sum_exp = np.sum(exp_diff, axis=axis, keepdims=True)
+    res = np.where(np.isneginf(m), -np.inf, m + np.log(sum_exp))
+    return np.squeeze(res, axis=axis)
 
 
 class NaiveBayesMultinomial(ClassifierMixin, BaseEstimator):
@@ -49,30 +54,54 @@ class NaiveBayesMultinomial(ClassifierMixin, BaseEstimator):
     """
 
     def __init__(self, alpha=1.0):
-        self.alpha = alpha
+        self.alpha = float(alpha)
 
     def fit(self, X, y):
         """Estima las probabilidades a partir de la matriz de conteos X y las etiquetas y. Devuelve self."""
-        raise NotImplementedError("Completar fit")
+        y = np.asarray(y)
+        classes, class_count = np.unique(y, return_counts=True)
+        self.classes_ = classes
+        self.class_count_ = class_count
+
+        n_classes = len(classes)
+        n_samples = X.shape[0]
+        n_features = X.shape[1]
+
+        self.class_log_prior_ = np.log(class_count / n_samples)
+
+        feature_count = np.empty((n_classes, n_features), dtype=np.float64)
+        for i, c in enumerate(classes):
+            mask = (y == c)
+            feature_count[i] = np.asarray(X[mask].sum(axis=0)).ravel()
+        self.feature_count_ = feature_count
+
+        smoothed_fc = feature_count + self.alpha
+        smoothed_cc = smoothed_fc.sum(axis=1, keepdims=True)
+        self.feature_log_prob_ = np.log(smoothed_fc) - np.log(smoothed_cc)
+
+        return self
 
     def _log_verosimilitud_conjunta(self, X):
         """Devuelve log P(c) + sum_t x_t · log P(t | c) para cada documento y clase.
 
         Forma del resultado: (n_documentos, n_clases). Se resuelve con un solo producto matricial.
         """
-        raise NotImplementedError("Completar _log_verosimilitud_conjunta")
+        return np.asarray(X @ self.feature_log_prob_.T) + self.class_log_prior_
 
     def predict_log_proba(self, X):
         """log P(c | documento): la log-verosimilitud conjunta normalizada con log_suma_exp."""
-        raise NotImplementedError("Completar predict_log_proba")
+        jll = self._log_verosimilitud_conjunta(X)
+        log_norm = log_suma_exp(jll, axis=1)
+        return jll - log_norm[:, np.newaxis]
 
     def predict_proba(self, X):
         """P(c | documento). Cada fila suma 1. Las columnas siguen el orden de classes_."""
-        raise NotImplementedError("Completar predict_proba")
+        return np.exp(self.predict_log_proba(X))
 
     def predict(self, X):
         """La clase con mayor probabilidad a posteriori para cada documento."""
-        raise NotImplementedError("Completar predict")
+        jll = self._log_verosimilitud_conjunta(X)
+        return self.classes_[np.argmax(jll, axis=1)]
 
 
 def terminos_mas_indicativos(modelo, vocabulario, n=10):
@@ -85,4 +114,22 @@ def terminos_mas_indicativos(modelo, vocabulario, n=10):
     `vocabulario` es la lista de términos en el orden de las columnas de X
     (por ejemplo, CountVectorizer.get_feature_names_out()).
     """
-    raise NotImplementedError("Completar terminos_mas_indicativos")
+    vocab = np.asarray(vocabulario)
+    k_clases = len(modelo.classes_)
+    feature_log_prob = modelo.feature_log_prob_
+
+    indicativos = {}
+    if k_clases > 1:
+        sum_total = feature_log_prob.sum(axis=0)
+        for i, c in enumerate(modelo.classes_):
+            sum_otras = sum_total - feature_log_prob[i]
+            promedio_otras = sum_otras / (k_clases - 1)
+            puntaje = feature_log_prob[i] - promedio_otras
+            mejores_idx = np.argsort(puntaje)[::-1][:n]
+            indicativos[c] = vocab[mejores_idx].tolist()
+    else:
+        for i, c in enumerate(modelo.classes_):
+            mejores_idx = np.argsort(feature_log_prob[i])[::-1][:n]
+            indicativos[c] = vocab[mejores_idx].tolist()
+
+    return indicativos
