@@ -20,7 +20,26 @@ def derivar(proba, clases, umbral_fraude, umbral_confianza):
 
     Devuelve un array de n_mensajes strings.
     """
-    raise NotImplementedError("Completar derivar")
+    proba = np.asarray(proba)
+    clases = np.asarray(clases)
+    n = len(proba)
+
+    idx_fraude = np.where(clases == "fraude")[0][0]
+    prob_fraude = proba[:, idx_fraude]
+    max_prob = np.max(proba, axis=1)
+    best_class = clases[np.argmax(proba, axis=1)]
+
+    destino = np.full(n, REVISION, dtype=object)
+
+    # 2. Si la probabilidad máxima >= umbral_confianza
+    mask_confianza = max_prob >= umbral_confianza
+    destino[mask_confianza] = best_class[mask_confianza]
+
+    # 1. Si P(fraude) >= umbral_fraude (tiene prioridad y sobreescribe)
+    mask_fraude = prob_fraude >= umbral_fraude
+    destino[mask_fraude] = "fraude"
+
+    return destino.astype(str)
 
 
 def evaluar_derivacion(y_real, destino):
@@ -33,4 +52,26 @@ def evaluar_derivacion(y_real, destino):
 
     Los tres valores son proporciones entre 0 y 1 (float).
     """
-    raise NotImplementedError("Completar evaluar_derivacion")
+    y_real = np.asarray(y_real)
+    destino = np.asarray(destino)
+
+    mask_auto = destino != REVISION
+    cobertura = float(np.mean(mask_auto))
+
+    if np.any(mask_auto):
+        exactitud_automatica = float(np.mean(destino[mask_auto] == y_real[mask_auto]))
+    else:
+        exactitud_automatica = 0.0
+
+    mask_real_fraude = y_real == "fraude"
+    if np.any(mask_real_fraude):
+        perdido = (destino[mask_real_fraude] != "fraude") & (destino[mask_real_fraude] != REVISION)
+        fraude_perdido = float(np.mean(perdido))
+    else:
+        fraude_perdido = 0.0
+
+    return {
+        "cobertura": cobertura,
+        "exactitud_automatica": exactitud_automatica,
+        "fraude_perdido": fraude_perdido
+    }
